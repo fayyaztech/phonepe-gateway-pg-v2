@@ -1,0 +1,33 @@
+{
+    "name": "fayyaztech/phonepe-payment-gateway",
+    "description": "PhonePe Payment Gateway Integration for PHP",
+    "type": "library",
+    "license": "MIT",
+    "minimum-stability": "stable",
+    "authors": [
+        {
+            "name": "fayyaztech",
+            "email": "fayyaztech@gmail.com"
+        }
+    ],
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/fayyaztech/phonepe-payment-gateway"
+        }
+    ],
+    "require": {
+        "ext-curl": "*",
+        "ext-json": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "fayyaztech\\phonePePaymentGateway\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "files": [
+            "examples/example.php"
+        ]
+    }
+}
