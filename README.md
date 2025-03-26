@@ -2,7 +2,7 @@
 
 A PHP package for integrating PhonePe payment gateway into your application.
 
-[![Latest Version on Packagist](https://img.shields.io/packagist/v/fayyaztech/phonepe-payment-gateway.svg)](https://packagist.org/packages/fayyaztech/phonepe-payment-gateway)
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/fayyaztech/phonepe-payment-gateway.svg?v=1)](https://packagist.org/packages/fayyaztech/phonepe-payment-gateway)
 [![License](https://img.shields.io/github/license/fayyaztech/phonepe-payment-gateway)](https://github.com/fayyaztech/phonepe-payment-gateway/blob/main/LICENSE)
 
 ## Installation
