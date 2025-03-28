@@ -1,60 +1,78 @@
 <?php
 
-//Use composer autoload to load class files
 require_once __DIR__ . "/../vendor/autoload.php";
 
-//Required package/libraries
-use fayyaztech\phonePePaymentGateway\PhonePe;
-use fayyaztech\phonePePaymentGateway\PhonePeApiException;
+use fayyaztech\PhonePeGatewayPGV2\PhonePe;
+use fayyaztech\PhonePeGatewayPGV2\PhonePeApiException;
 
 try {
     // Initialize PhonePe with your credentials
     $phonepe = new PhonePe(
-        merchant_id: 'MERCHANTID',  // Your PhonePe merchant ID
-        salt_key: 'SALTKEY',        // Your salt key
-        salt_index: 1               // Your salt index
+        merchant_id: 'MERCHANTID',     // Your PhonePe merchant ID
+        client_secret: 'CLIENT_SECRET', // Your client secret
+        client_id: 'CLIENT_ID',       // Your client ID
+        debug: true                   // Enable debug logging
     );
 
     // Example: Initiate Payment
-    $response = $phonepe->PaymentCall(
-        merchantTransactionId: 'TXN' . time(),  // Unique transaction ID
-        merchantUserId: 'USER123',              // Customer ID
-        amount: 100 * 100,                      // Amount in paise (Rs. 100)
+    $response = $phonepe->initiatePayment(
+        merchantOrderId: 'ORDER' . time(),    // Unique order ID
+        amount: 100 * 100,                   // Amount in paise (Rs. 100)
         redirectUrl: 'https://your-domain.com/redirect',
-        callbackUrl: 'https://your-domain.com/callback',
-        mobileNumber: '9999999999',
-        mode: 'UAT'                             // Use UAT for testing
+        metaInfo: [                          // Optional metadata
+            'udf1' => 'custom-value-1',
+            'udf2' => 'custom-value-2'
+        ],
+        enabledPaymentModes: [               // Optional payment modes
+            ['type' => 'UPI_INTENT'],
+            ['type' => 'CARD', 'cardTypes' => ['CREDIT_CARD']]
+        ],
+        expireAfter: 1200,                  // Optional expiry in seconds
+        mode: 'UAT'                         // Use UAT for testing
     );
 
-    // Print payment URL
-    if ($response['responseCode'] === 200) {
-        echo "Payment URL: " . $response['url'] . "\n";
-    } else {
-        echo "Error: " . $response['msg'] . "\n";
+    // Print payment details
+    if (isset($response['orderId'])) {
+        echo "Order ID: " . $response['orderId'] . "\n";
+        echo "Payment URL: " . $response['redirectUrl'] . "\n";
+        echo "Status: " . $response['state'] . "\n";
     }
 
     // Example: Check Payment Status
-    $statusResponse = $phonepe->PaymentStatus(
-        merchantId: 'MERCHANTID',
-        merchantTransactionId: 'TXN123',
+    $statusResponse = $phonepe->getOrderStatus(
+        orderId: 'ORDER123',
         mode: 'UAT'
     );
 
     // Print status
-    echo "Payment Status: " . $statusResponse['status'] . "\n";
+    if ($statusResponse['success']) {
+        echo "Payment Status: " . $statusResponse['data']['state'] . "\n";
+        echo "Amount: " . $statusResponse['data']['amount'] . "\n";
+    }
 
     // Example: Process Refund
-    $refundResponse = $phonepe->PaymentRefund(
-        merchantId: 'MERCHANTID',
-        refundtransactionId: 'REFUND' . time(),
-        orderTransactionId: 'TXN123',
-        callbackUrl: 'https://your-domain.com/refund-callback',
+    $refundResponse = $phonepe->initiateRefund(
+        merchantRefundId: 'REFUND' . time(),
+        originalMerchantOrderId: 'ORDER123',
         amount: 100 * 100,
         mode: 'UAT'
     );
 
     // Print refund status
-    echo "Refund Status: " . $refundResponse['state'] . "\n";
+    if ($refundResponse['success']) {
+        echo "Refund Status: " . print_r($refundResponse['data'], true) . "\n";
+    }
+
+    // Example: Check Refund Status
+    $refundStatusResponse = $phonepe->getRefundStatus(
+        merchantRefundId: 'REFUND123',
+        mode: 'UAT'
+    );
+
+    // Print refund status details
+    if ($refundStatusResponse['success']) {
+        echo "Refund Status Details: " . print_r($refundStatusResponse['data'], true) . "\n";
+    }
 } catch (PhonePeApiException $e) {
-    echo "Error: " . $e->errorMessage() . "\n";
+    echo "Error: " . $e->getMessage() . "\n";
 }

@@ -1,6 +1,6 @@
-# PhonePe Payment Gateway Integration
+# PhonePe Payment Gateway PG V2
 
-A PHP package for integrating PhonePe payment gateway into your application.
+A PHP package for integrating PhonePe Payment Gateway PG V2 into your application.
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/fayyaztech/phonepe-payment-gateway.svg?v=1)](https://packagist.org/packages/fayyaztech/phonepe-payment-gateway)
 [![License](https://img.shields.io/github/license/fayyaztech/phonepe-payment-gateway)](https://github.com/fayyaztech/phonepe-payment-gateway/blob/main/LICENSE)
@@ -10,7 +10,7 @@ A PHP package for integrating PhonePe payment gateway into your application.
 You can install the package via composer:
 
 ```bash
-composer require fayyaztech/phonepe-payment-gateway
+composer require fayyaztech/phonepe-gateway-pg-v2
 ```
 
 ## Configuration
@@ -19,8 +19,8 @@ Set the following environment variables in your `.env` file:
 
 ```env
 PHONEPE_MERCHANT_ID=YOUR_MERCHANT_ID
-PHONEPE_SALT_KEY=YOUR_SALT_KEY
-PHONEPE_SALT_INDEX=1
+PHONEPE_CLIENT_SECRET=YOUR_CLIENT_SECRET
+PHONEPE_CLIENT_ID=YOUR_CLIENT_ID
 ```
 
 ## Usage
@@ -28,40 +28,48 @@ PHONEPE_SALT_INDEX=1
 ### Basic Implementation
 
 ```php
-use fayyaztech\phonePePaymentGateway\PhonePe;
+use fayyaztech\PhonePeGatewayPGV2\PhonePe;
 
 // Initialize PhonePe
 $phonepe = new PhonePe(
     merchant_id: 'YOUR_MERCHANT_ID',
-    salt_key: 'YOUR_SALT_KEY',
-    salt_index: 1
+    client_secret: 'YOUR_CLIENT_SECRET',
+    client_id: 'YOUR_CLIENT_ID',
+    debug: true // Optional debug mode
 );
 
 // Initiate Payment
-$response = $phonepe->PaymentCall(
-    merchantTransactionId: 'TXN' . time(),
-    merchantUserId: 'USER123',
+$response = $phonepe->initiatePayment(
+    merchantOrderId: 'ORDER' . time(),
     amount: 100 * 100, // Amount in paise
     redirectUrl: 'https://your-domain.com/redirect',
-    callbackUrl: 'https://your-domain.com/callback',
-    mobileNumber: '9999999999',
+    metaInfo: [
+        'udf1' => 'custom-value-1'
+    ],
+    enabledPaymentModes: [
+        ['type' => 'UPI_INTENT'],
+        ['type' => 'CARD', 'cardTypes' => ['CREDIT_CARD']]
+    ],
     mode: 'UAT' // Use 'PROD' for production
 );
 
 // Check Payment Status
-$statusResponse = $phonepe->PaymentStatus(
-    merchantId: 'YOUR_MERCHANT_ID',
-    merchantTransactionId: 'TXN123',
+$statusResponse = $phonepe->getOrderStatus(
+    orderId: 'ORDER123',
     mode: 'UAT'
 );
 
 // Process Refund
-$refundResponse = $phonepe->PaymentRefund(
-    merchantId: 'YOUR_MERCHANT_ID',
-    refundtransactionId: 'REFUND' . time(),
-    orderTransactionId: 'TXN123',
-    callbackUrl: 'https://your-domain.com/refund-callback',
+$refundResponse = $phonepe->initiateRefund(
+    merchantRefundId: 'REFUND' . time(),
+    originalMerchantOrderId: 'ORDER123',
     amount: 100 * 100,
+    mode: 'UAT'
+);
+
+// Check Refund Status
+$refundStatusResponse = $phonepe->getRefundStatus(
+    merchantRefundId: 'REFUND123',
     mode: 'UAT'
 );
 ```
@@ -70,52 +78,67 @@ $refundResponse = $phonepe->PaymentRefund(
 
 ```php
 // Payment Response
-if ($response['responseCode'] === 200) {
-    $paymentUrl = $response['url'];
+if (isset($response['orderId'])) {
+    $paymentUrl = $response['redirectUrl'];
+    $orderId = $response['orderId'];
+    $state = $response['state'];
     // Redirect user to payment URL
-} else {
-    $errorMessage = $response['msg'];
-    // Handle error
 }
 
 // Status Response
-if ($statusResponse['responseCode'] === 200) {
-    $transactionStatus = $statusResponse['status'];
-    // Handle transaction status
+if ($statusResponse['success']) {
+    $orderDetails = $statusResponse['data'];
+    $state = $orderDetails['state'];
+    $amount = $orderDetails['amount'];
+    // Handle order status
 }
 
 // Refund Response
-if ($refundResponse['responseCode'] === 200) {
-    $refundStatus = $refundResponse['state'];
-    // Handle refund status
+if ($refundResponse['success']) {
+    $refundDetails = $refundResponse['data'];
+    // Handle refund details
 }
 ```
 
 ## Available Methods
 
-- `PaymentCall()`: Initiate a payment transaction
-- `PaymentStatus()`: Check payment status
-- `PaymentRefund()`: Process refund for a transaction
+- `initiatePayment()`: Start a new payment transaction
+- `getOrderStatus()`: Check payment order status
+- `initiateRefund()`: Process refund for a transaction
+- `getRefundStatus()`: Check refund status
+
+## Supported Payment Methods
+
+```php
+const PAYMENT_MODES = [
+    ['type' => 'UPI_INTENT'],
+    ['type' => 'UPI_COLLECT'],
+    ['type' => 'UPI_QR'],
+    ['type' => 'NET_BANKING'],
+    ['type' => 'CARD', 'cardTypes' => ['DEBIT_CARD', 'CREDIT_CARD']]
+];
+```
 
 ## Testing
 
-For testing, use the UAT mode and test credentials provided by PhonePe.
+For testing, use the UAT mode with your sandbox credentials:
 
 ```php
 $phonepe = new PhonePe(
     merchant_id: 'TEST_MERCHANT_ID',
-    salt_key: 'TEST_SALT_KEY',
-    salt_index: 1
+    client_secret: 'TEST_CLIENT_SECRET',
+    client_id: 'TEST_CLIENT_ID',
+    debug: true
 );
 ```
 
 ## Error Handling
 
 ```php
-use fayyaztech\phonePePaymentGateway\PhonePeApiException;
+use fayyaztech\PhonePeGatewayPGV2\PhonePeApiException;
 
 try {
-    $response = $phonepe->PaymentCall(...);
+    $response = $phonepe->initiatePayment(...);
 } catch (PhonePeApiException $e) {
     echo $e->errorMessage();
 }

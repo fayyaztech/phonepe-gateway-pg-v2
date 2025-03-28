@@ -1,262 +1,344 @@
 <?php
 
 /**
- * PhonePe Payment Gateway Integration Class
- * 
- * This class provides methods to integrate with PhonePe's payment gateway services
- * including payment initiation, status checking, and refund processing.
+ * PhonePe Payment Gateway PG V2 Integration
  * 
  * @author fayyaztech
- * @package fayyaztech\phonePePaymentGateway
+ * @package fayyaztech\PhonePeGatewayPGV2
  */
 
-namespace fayyaztech\phonePePaymentGateway;
+namespace fayyaztech\PhonePeGatewayPGV2;
+
+use Exception;
 
 class PhonePe
 {
-    // API endpoint URLs
-    private const PROD_URL = 'https://api.phonepe.com/apis/hermes/pg/v1/';
-    protected const UAT_URL = 'https://api-preprod.phonepe.com/apis/pg-sandbox/pg/v1/';
+    // API endpoint URLs for different services
+    private const PROD_AUTH_URL = 'https://api.phonepe.com/apis/identity-manager/v1/oauth/token';
+    private const PROD_CHECKOUT_URL = 'https://api.phonepe.com/apis/pg/checkout/v2/';
+    private const PROD_PAYMENTS_URL = 'https://api.phonepe.com/apis/pg/payments/v2/';
+
+    private const UAT_AUTH_URL = 'https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token';
+    private const UAT_CHECKOUT_URL = 'https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/';
+    private const UAT_PAYMENTS_URL = 'https://api-preprod.phonepe.com/apis/pg-sandbox/payments/v2/';
+
+    // Fixed values
+    private const CLIENT_VERSION = '1';
+    private const GRANT_TYPE = 'client_credentials';
 
     // Payment modes
     private const MODE_UAT = 'UAT';  // Testing/Sandbox mode
     private const MODE_PROD = 'PROD'; // Production mode
 
     /**
-     * @var int Salt index used for request signature
+     * @var array Default payment modes if none specified
      */
-    private int $salt_index;
+    private const DEFAULT_PAYMENT_MODES = [
+        ['type' => 'UPI_INTENT'],
+        ['type' => 'UPI_COLLECT'],
+        ['type' => 'UPI_QR'],
+        ['type' => 'NET_BANKING'],
+        ['type' => 'CARD', 'cardTypes' => ['DEBIT_CARD', 'CREDIT_CARD']]
+    ];
 
     /**
-     * @var string Salt key used for request signature
+     * @var string Client secret used for request signature
      */
-    protected string $salt_key;
+    protected string $client_secret;
 
     /**
      * @var string Merchant ID assigned by PhonePe
      */
     protected string $merchant_id;
 
-    public function __construct(?string $merchant_id = null, ?string $salt_key = null, ?int $salt_index = null)
-    {
+    /**
+     * @var string Client ID assigned by PhonePe
+     */
+    protected string $client_id;
+
+    /**
+     * @var string Access token for API calls
+     */
+    private string $access_token = '';
+
+    /**
+     * @var string Encrypted version of the access token
+     */
+    private string $encrypted_access_token = '';
+
+    /**
+     * @var string Refresh token for getting new access token
+     */
+    private string $refresh_token = '';
+
+    /**
+     * @var string Token type (usually O-Bearer)
+     */
+    private string $token_type = '';
+
+    /**
+     * @var int Token expiry timestamp
+     */
+    private int $token_expires_at = 0;
+
+    /**
+     * @var bool Enable request/response logging
+     */
+    private bool $debug = false;
+
+    public function __construct(
+        ?string $merchant_id = null,
+        ?string $client_secret = null,
+        ?string $client_id = null,
+        bool $debug = false
+    ) {
         $this->merchant_id = $merchant_id ?? getenv('PHONEPE_MERCHANT_ID');
-        $this->salt_key = $salt_key ?? getenv('PHONEPE_SALT_KEY');
-        $this->salt_index = $salt_index ?? (int)getenv('PHONEPE_SALT_INDEX');
+        $this->client_secret = $client_secret ?? getenv('PHONEPE_CLIENT_SECRET');
+        $this->client_id = $client_id ?? getenv('PHONEPE_CLIENT_ID');
+        $this->debug = $debug;
 
         if (empty($this->merchant_id)) throw new PhonePeApiException("Merchant ID is required");
-        if (empty($this->salt_key)) throw new PhonePeApiException("Salt Key is required");
-        if (empty($this->salt_index)) throw new PhonePeApiException("Salt Index is required");
+        if (empty($this->client_secret)) throw new PhonePeApiException("Client Secret is required");
+        if (empty($this->client_id)) throw new PhonePeApiException("Client ID is required");
     }
 
     /**
-     * Initiates a payment transaction through PhonePe gateway
+     * Gets or refreshes the access token
      * 
-     * @param string $merchantTransactionId Unique identifier for this transaction
-     * @param string $merchantUserId Identifier for the customer
-     * @param int $amount Amount in lowest currency denomination (paisa for INR)
-     * @param string $redirectUrl URL where customer will be redirected after payment
-     * @param string $callbackUrl Webhook URL for payment notifications
-     * @param string $mobileNumber Customer's mobile number
      * @param string|null $mode Payment mode (UAT/PROD)
-     * @return array{responseCode: int, url: string, msg: string, status: string} Payment response
+     * @return string Valid access token
+     * @throws PhonePeApiException When token request fails
+     */
+    private function getAccessToken(?string $mode = null): string
+    {
+        // Return existing token if still valid
+        if ($this->access_token && time() < $this->token_expires_at) {
+            return $this->access_token;
+        }
+
+        $postFields = http_build_query([
+            'client_id' => $this->client_id,
+            'client_secret' => $this->client_secret,
+            'client_version' => self::CLIENT_VERSION,
+            'grant_type' => self::GRANT_TYPE
+        ]);
+
+        $headers = [
+            'Content-Type: application/x-www-form-urlencoded',
+            'Accept: application/json'
+        ];
+
+        try {
+            $response = $this->makeApiCall(
+                $mode == 'UAT' ? self::UAT_AUTH_URL : self::PROD_AUTH_URL,
+                $headers,
+                $postFields,
+                'POST',
+                true
+            );
+
+            if (!isset($response->access_token)) {
+                throw new PhonePeApiException("Invalid token response");
+            }
+
+            // Store all token information
+            $this->access_token = $response->access_token;
+            $this->encrypted_access_token = $response->encrypted_access_token;
+            $this->refresh_token = $response->refresh_token;
+            $this->token_type = $response->token_type;
+
+            // Calculate expiry time
+            $this->token_expires_at = $response->expires_at ??
+                (time() + ($response->expires_in ?? 3600));
+
+            return $this->access_token;
+        } catch (Exception $e) {
+            throw new PhonePeApiException("Failed to get access token: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Initiates a payment transaction through PhonePe gateway v2
+     * 
+     * @param string $merchantOrderId Unique order identifier
+     * @param int $amount Amount in lowest denomination (paisa for INR)
+     * @param string $redirectUrl URL where customer will be redirected after payment
+     * @param array $metaInfo Optional additional information
+     * @param array $enabledPaymentModes Optional array of enabled payment modes
+     * @param int $expireAfter Time in seconds after which payment link expires (default 1200)
+     * @param string|null $mode Payment mode (UAT/PROD)
+     * @return array{orderId: string, state: string, redirectUrl: string} Payment response
      * @throws PhonePeApiException When API call fails
      */
-    public function PaymentCall(
-        string $merchantTransactionId,
-        string $merchantUserId,
+    public function initiatePayment(
+        string $merchantOrderId,
         int $amount,
         string $redirectUrl,
-        string $callbackUrl,
-        string $mobileNumber,
+        array $metaInfo = [],
+        array $enabledPaymentModes = [],
+        int $expireAfter = 1200,
         ?string $mode = null
     ): array {
-        $paymentMsg = "";
-        $paymentCode = "";
-        $payUrl = "";
-        $payload = array(
-            "merchantId" => "$this->merchant_id",
-            "merchantTransactionId" => "$merchantTransactionId",
-            "merchantUserId" => "$merchantUserId",
+        $this->validateAmount($amount);
+
+        $payload = [
+            "merchantOrderId" => $merchantOrderId,
             "amount" => $amount,
-            "redirectUrl" => "$redirectUrl",
-            "redirectMode" => "POST",
-            "callbackUrl" => "$callbackUrl",
-            "mobileNumber" => "$mobileNumber",
-            "paymentInstrument" => array(
-                "type" => "PAY_PAGE"
-            )
-        );
-
-        $payload_str = json_encode($payload);
-        $base64_payload = base64_encode($payload_str);
-        $hashString = $base64_payload . "/pg/v1/pay" . $this->salt_key;
-        $hashedValue = hash('sha256', $hashString);
-        $result = $hashedValue . "###" . $this->salt_index;
-
-        if ($mode == 'UAT')
-            $url = self::UAT_URL . 'pay';
-        else
-            $url = self::PROD_URL . 'pay';
-
-        $headers = [
-            "Content-Type: application/json",
-            "accept: application/json",
-            "X-VERIFY: $result",
+            "expireAfter" => $expireAfter,
+            "metaInfo" => $metaInfo ?: [
+                "udf1" => "",
+                "udf2" => "",
+                "udf3" => "",
+                "udf4" => "",
+                "udf5" => ""
+            ],
+            "paymentFlow" => [
+                "type" => "PG_CHECKOUT",
+                "message" => "Payment for order {$merchantOrderId}",
+                "merchantUrls" => [
+                    "redirectUrl" => $redirectUrl
+                ],
+                "paymentModeConfig" => [
+                    "enabledPaymentModes" => $enabledPaymentModes ?: self::DEFAULT_PAYMENT_MODES
+                ]
+            ]
         ];
+
+        $baseUrl = $mode == 'UAT' ? self::UAT_CHECKOUT_URL : self::PROD_CHECKOUT_URL;
+        $url = $baseUrl . 'pay';
 
         try {
-            $res = $this->makeApiCall($url, $headers, ['request' => "$base64_payload"]);
-        } catch (PhonePeApiException $e) {
-            return [
-                'responseCode' => 400,
-                'error' => $e->getMessage()
-            ];
-        }
+            $res = $this->makeApiCall($url, [], $payload, 'POST');
 
-        if (isset($res->success) && $res->success == '1') {
-            $paymentCode = $res->code;
-            $paymentMsg = $res->message;
-            $payUrl = $res->data->instrumentResponse->redirectInfo->url;
-        } else {
-            return [
-                'responseCode' => $res->code,
-                'url' => '',
-                'msg' => $res->message,
-                'status' => $res->status ?? 'Error from PhonePe Server',
-            ];
-        }
+            if (!isset($res->orderId)) {
+                throw new PhonePeApiException("Invalid payment response");
+            }
 
-        return [
-            'responseCode' => 200,
-            'url' => $payUrl,
-            'msg' => $paymentMsg,
-            'status' => $paymentCode,
-        ];
+            return [
+                'orderId' => $res->orderId,
+                'state' => $res->state,
+                'redirectUrl' => $res->redirectUrl,
+                'expireAt' => $res->expireAt
+            ];
+        } catch (Exception $e) {
+            throw new PhonePeApiException("Payment initiation failed: " . $e->getMessage());
+        }
     }
 
     /**
-     * Check the status of a payment transaction
+     * Check the status of a payment order
      * 
-     * @param string $merchantId Merchant ID for the transaction
-     * @param string $merchantTransactionId Transaction ID to check
+     * @param string $orderId PhonePe Order ID to check
      * @param string|null $mode Payment mode (UAT/PROD)
-     * @return array{responseCode: int, txn: string, msg: string, status: string} Status response
+     * @return array{
+     *     success: bool,
+     *     data?: array{
+     *         orderId: string,
+     *         state: string,
+     *         amount: int,
+     *         expireAt: int,
+     *         metaInfo: array,
+     *         paymentDetails: array
+     *     },
+     *     error?: string
+     * }
      * @throws PhonePeApiException When API call fails
      */
-    public function PaymentStatus($merchantId, $merchantTransactionId, $mode = null): array
+    public function getOrderStatus(string $orderId, ?string $mode = null): array
     {
-        $paymentMsg = "";
-        $paymentStatus = "";
-        $txnid = "";
-        $hashString = "/pg/v1/status/$merchantId/$merchantTransactionId" . $this->salt_key;
-        $hashedValue = hash('sha256', $hashString);
-        $result = $hashedValue . "###" . $this->salt_index;
-        if ($mode == 'UAT')
-            $url = self::UAT_URL . 'status/' . $merchantId . '/' . $merchantTransactionId;
-        else
-            $url = self::PROD_URL . 'status/' . $merchantId . '/' . $merchantTransactionId;
-
-        $headers = [
-            "Content-Type: application/json",
-            "X-MERCHANT-ID:$merchantId",
-            "X-VERIFY:$result",
-            "accept: application/json",
-        ];
+        $baseUrl = $mode == 'UAT' ? self::UAT_CHECKOUT_URL : self::PROD_CHECKOUT_URL;
+        $url = $baseUrl . "order/{$orderId}/status";
 
         try {
-            $res = $this->makeApiCall($url, $headers);
+            $res = $this->makeApiCall($url, [], null, 'GET');
+
+            return [
+                'success' => true,
+                'data' => [
+                    'orderId' => $res->orderId,
+                    'state' => $res->state,
+                    'amount' => $res->amount,
+                    'expireAt' => $res->expireAt,
+                    'metaInfo' => (array) ($res->metaInfo ?? []),
+                    'paymentDetails' => (array) ($res->paymentDetails ?? [])
+                ]
+            ];
         } catch (PhonePeApiException $e) {
             return [
-                'responseCode' => 400,
+                'success' => false,
                 'error' => $e->getMessage()
             ];
         }
-
-        if (isset($res->success) && $res->success == '1') {
-            $paymentStatus = $res->data->responseCode;
-            $paymentMsg = $res->message;
-            $txnid = $res->data->merchantTransactionId;
-        }
-
-        return [
-            'responseCode' => 200,
-            'txn' => $txnid,
-            'msg' => $paymentMsg,
-            'status' => $paymentStatus,
-        ];
     }
 
     /**
-     * Process a refund for a completed transaction
+     * Process a refund for a completed transaction using v2 API
      * 
-     * @param string $merchantId Merchant ID for the transaction
-     * @param string $refundtransactionId Unique ID for this refund
-     * @param string $orderTransactionId Original transaction ID to refund
-     * @param string $callbackUrl Webhook URL for refund notifications
+     * @param string $merchantRefundId Unique ID for this refund
+     * @param string $originalMerchantOrderId Original order ID to refund
      * @param int $amount Amount to refund in lowest denomination
      * @param string|null $mode Payment mode (UAT/PROD)
-     * @return array{responseCode: int, state: string, msg: string, status: string} Refund response
+     * @return array Refund response
      * @throws PhonePeApiException When API call fails
      */
-    public function PaymentRefund($merchantId, $refundtransactionId, $orderTransactionId, $callbackUrl, $amount, $mode = null): array
-    {
-        $paymentMsg = "";
-        $paymentCode = "";
-        $state = "";
-        $payload = array(
-            "merchantId" => "$merchantId",
-            "merchantTransactionId" => "$refundtransactionId",
-            "originalTransactionId" => "$orderTransactionId",
-            "amount" => $amount,
-            "callbackUrl" => "$callbackUrl"
-        );
+    public function initiateRefund(
+        string $merchantRefundId,
+        string $originalMerchantOrderId,
+        int $amount,
+        ?string $mode = null
+    ): array {
+        $this->validateAmount($amount);
 
-        $payload_str = json_encode($payload);
-        $base64_payload = base64_encode($payload_str);
-        $hashString = $base64_payload . "/pg/v1/refund" . $this->salt_key;
-        $hashedValue = hash('sha256', $hashString);
-        $result = $hashedValue . "###" . $this->salt_index;
-
-        if ($mode == self::MODE_UAT) {
-            $url = self::UAT_URL . 'refund';
-        } else {
-            $url = self::PROD_URL . 'refund';
-        }
-
-        $headers = [
-            "Content-Type: application/json",
-            "accept: application/json",
-            "X-VERIFY: $result",
+        $payload = [
+            "merchantRefundId" => $merchantRefundId,
+            "originalMerchantOrderId" => $originalMerchantOrderId,
+            "amount" => $amount
         ];
 
+        $baseUrl = $mode == 'UAT' ? self::UAT_PAYMENTS_URL : self::PROD_PAYMENTS_URL;
+        $url = $baseUrl . 'refund';
+
         try {
-            $res = $this->makeApiCall($url, $headers, ['request' => "$base64_payload"]);
+            $res = $this->makeApiCall($url, [], $payload, 'POST');
+
+            return [
+                'success' => true,
+                'data' => $res
+            ];
         } catch (PhonePeApiException $e) {
             return [
-                'responseCode' => 400,
+                'success' => false,
                 'error' => $e->getMessage()
             ];
         }
+    }
 
-        if (isset($res->success) && $res->success == '1') {
-            $paymentCode = $res->code;
-            $paymentMsg = $res->message;
-            $state = $res->data->state;
-        } else {
+    /**
+     * Check the status of a refund
+     * 
+     * @param string $merchantRefundId The refund ID to check status for
+     * @param string|null $mode Payment mode (UAT/PROD)
+     * @return array Status response with refund details
+     * @throws PhonePeApiException When API call fails
+     */
+    public function getRefundStatus(string $merchantRefundId, ?string $mode = null): array
+    {
+        $baseUrl = $mode == 'UAT' ? self::UAT_PAYMENTS_URL : self::PROD_PAYMENTS_URL;
+        $url = $baseUrl . "refund/{$merchantRefundId}/status";
+
+        try {
+            $res = $this->makeApiCall($url, [], null, 'GET');
+
             return [
-                'responseCode' => $res->code,
-                'state' => $res->code,
-                'msg' => $res->message ?? 'Error from PhonePe Server' . $res->code,
-                'status' => $res->status ?? 'Error from PhonePe Server' . $res->code,
+                'success' => true,
+                'data' => $res
+            ];
+        } catch (PhonePeApiException $e) {
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
             ];
         }
-
-        return [
-            'responseCode' => 200,
-            'state' => $state,
-            'msg' => $paymentMsg,
-            'status' => $paymentCode,
-        ];
     }
 
     /**
@@ -277,13 +359,34 @@ class PhonePe
      * 
      * @param string $url API endpoint URL
      * @param array $headers Request headers
-     * @param array|null $postData POST data (optional)
+     * @param string|array|null $postData POST data (optional)
+     * @param string $method HTTP method (GET, POST, etc.)
+     * @param bool $isAuthCall Whether this is an auth token request
      * @return object Response from API
      * @throws PhonePeApiException When API call fails
      */
-    private function makeApiCall(string $url, array $headers, ?array $postData = null): object
-    {
-        $curl = curl_init();
+    private function makeApiCall(
+        string $url,
+        array $headers,
+        $postData = null,
+        string $method = 'GET',
+        bool $isAuthCall = false
+    ): object {
+        if (!$isAuthCall && $this->access_token) {
+            $headers[] = 'Authorization: ' . $this->token_type . ' ' . $this->getAccessToken();
+        }
+
+        if (
+            !in_array('Content-Type: application/json', $headers) &&
+            !in_array('Content-Type: application/x-www-form-urlencoded', $headers)
+        ) {
+            $headers[] = 'Content-Type: application/json';
+        }
+
+        if (!in_array('Accept: application/json', $headers)) {
+            $headers[] = 'Accept: application/json';
+        }
+
         $options = [
             CURLOPT_URL => $url,
             CURLOPT_RETURNTRANSFER => true,
@@ -291,23 +394,50 @@ class PhonePe
             CURLOPT_MAXREDIRS => 10,
             CURLOPT_TIMEOUT => 30,
             CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST => $method,
             CURLOPT_HTTPHEADER => $headers
         ];
 
         if ($postData !== null) {
-            $options[CURLOPT_CUSTOMREQUEST] = 'POST';
-            $options[CURLOPT_POSTFIELDS] = json_encode($postData);
+            $options[CURLOPT_POSTFIELDS] = is_array($postData) ?
+                json_encode($postData) : $postData;
         }
 
+        if ($this->debug) {
+            error_log("PhonePe API Request: $url");
+            error_log("Headers: " . print_r($headers, true));
+            error_log("Payload: " . print_r($postData, true));
+        }
+
+        $curl = curl_init();
         curl_setopt_array($curl, $options);
         $response = curl_exec($curl);
+        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
         $err = curl_error($curl);
         curl_close($curl);
+
+        if ($this->debug) {
+            error_log("Response Code: $httpCode");
+            error_log("Response: $response");
+            if ($err) error_log("Error: $err");
+        }
 
         if ($err) {
             throw new PhonePeApiException("API Call Failed: {$err}");
         }
 
-        return json_decode($response);
+        $decoded = json_decode($response);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new PhonePeApiException("Invalid JSON response");
+        }
+
+        if ($httpCode >= 400) {
+            throw new PhonePeApiException(
+                "API request failed with code $httpCode: " .
+                    ($decoded->message ?? 'Unknown error')
+            );
+        }
+
+        return $decoded;
     }
 }

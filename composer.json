@@ -1,5 +1,5 @@
 {
-    "name": "fayyaztech/phonepe-payment-gateway",
+    "name": "fayyaztech/phonepe-gateway-pg-v2",
     "description": "PhonePe Payment Gateway Integration for PHP",
     "type": "library",
     "license": "MIT",
@@ -22,7 +22,7 @@
     },
     "autoload": {
         "psr-4": {
-            "fayyaztech\\phonePePaymentGateway\\": "src/"
+            "fayyaztech\\PhonePeGatewayPGV2\\": "src/"
         }
     },
     "autoload-dev": {
