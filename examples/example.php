@@ -8,9 +8,8 @@ use fayyaztech\phonePePaymentGateway\PhonePeApiException;
 try {
     // Initialize PhonePe with your credentials
     $phonepe = new PhonePe(
-        merchant_id: 'MERCHANTID',     // Your PhonePe merchant ID
+        client_id: 'CLIENT_ID',       // Your client ID (first parameter)
         client_secret: 'CLIENT_SECRET', // Your client secret
-        client_id: 'CLIENT_ID',       // Your client ID
         debug: true                   // Enable debug logging
     );
 

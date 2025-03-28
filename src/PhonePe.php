@@ -48,11 +48,6 @@ class PhonePe
     protected string $client_secret;
 
     /**
-     * @var string Merchant ID assigned by PhonePe
-     */
-    protected string $merchant_id;
-
-    /**
      * @var string Client ID assigned by PhonePe
      */
     protected string $client_id;
@@ -88,19 +83,23 @@ class PhonePe
     private bool $debug = false;
 
     public function __construct(
-        ?string $merchant_id = null,
-        ?string $client_secret = null,
         ?string $client_id = null,
+        ?string $client_secret = null,
         bool $debug = false
     ) {
-        $this->merchant_id = $merchant_id ?? getenv('PHONEPE_MERCHANT_ID');
-        $this->client_secret = $client_secret ?? getenv('PHONEPE_CLIENT_SECRET');
         $this->client_id = $client_id ?? getenv('PHONEPE_CLIENT_ID');
+        $this->client_secret = $client_secret ?? getenv('PHONEPE_CLIENT_SECRET');
         $this->debug = $debug;
 
-        if (empty($this->merchant_id)) throw new PhonePeApiException("Merchant ID is required");
-        if (empty($this->client_secret)) throw new PhonePeApiException("Client Secret is required");
         if (empty($this->client_id)) throw new PhonePeApiException("Client ID is required");
+        if (empty($this->client_secret)) throw new PhonePeApiException("Client Secret is required");
+
+        // Initialize token on construction
+        try {
+            $this->getAccessToken();
+        } catch (Exception $e) {
+            throw new PhonePeApiException("Failed to initialize token: " . $e->getMessage());
+        }
     }
 
     /**
@@ -112,8 +111,8 @@ class PhonePe
      */
     private function getAccessToken(?string $mode = null): string
     {
-        // Return existing token if still valid
-        if ($this->access_token && time() < $this->token_expires_at) {
+        // Return existing token if still valid and not empty
+        if (!empty($this->access_token) && time() < $this->token_expires_at) {
             return $this->access_token;
         }
 

@@ -21,7 +21,6 @@ composer require fayyaztech/phonepe-gateway-pg-v2:dev-main
 Set the following environment variables in your `.env` file:
 
 ```env
-PHONEPE_MERCHANT_ID=YOUR_MERCHANT_ID
 PHONEPE_CLIENT_SECRET=YOUR_CLIENT_SECRET
 PHONEPE_CLIENT_ID=YOUR_CLIENT_ID
 ```
@@ -35,9 +34,8 @@ use fayyaztech\PhonePeGatewayPGV2\PhonePe;
 
 // Initialize PhonePe
 $phonepe = new PhonePe(
-    merchant_id: 'YOUR_MERCHANT_ID',
+    client_id: 'YOUR_CLIENT_ID',    // First parameter
     client_secret: 'YOUR_CLIENT_SECRET',
-    client_id: 'YOUR_CLIENT_ID',
     debug: true // Optional debug mode
 );
 
