@@ -1,6 +1,6 @@
 {
     "name": "fayyaztech/phonepe-gateway-pg-v2",
-    "description": "PhonePe Payment Gateway Integration for PHP",
+    "description": "PhonePe Payment Gateway PG V2 Integration for PHP",
     "type": "library",
     "license": "MIT",
     "minimum-stability": "stable",
@@ -13,7 +13,7 @@
     "repositories": [
         {
             "type": "vcs",
-            "url": "https://github.com/fayyaztech/phonepe-payment-gateway"
+            "url": "https://github.com/fayyaztech/phonepe-gateway-pg-v2"
         }
     ],
     "require": {

@@ -7,10 +7,13 @@ A PHP package for integrating PhonePe Payment Gateway PG V2 into your applicatio
 
 ## Installation
 
-You can install the package via composer:
-
 ```bash
+# For direct installation
 composer require fayyaztech/phonepe-gateway-pg-v2
+
+# If using repository
+composer config repositories.phonepe-gateway-pg-v2 vcs https://github.com/fayyaztech/phonepe-gateway-pg-v2
+composer require fayyaztech/phonepe-gateway-pg-v2:dev-main
 ```
 
 ## Configuration
