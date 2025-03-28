@@ -3,13 +3,14 @@
 require_once __DIR__ . "/../vendor/autoload.php";
 
 use fayyaztech\PhonePeGatewayPGV2\PhonePe;
-use fayyaztech\phonePePaymentGateway\PhonePeApiException;
+use fayyaztech\PhonePeGatewayPGV2\PhonePeApiException;
 
 try {
     // Initialize PhonePe with your credentials
     $phonepe = new PhonePe(
         client_id: 'CLIENT_ID',       // Your client ID (first parameter)
         client_secret: 'CLIENT_SECRET', // Your client secret
+        mode: 'UAT',                 // Set mode once here
         debug: true                   // Enable debug logging
     );
 
@@ -26,8 +27,7 @@ try {
             ['type' => 'UPI_INTENT'],
             ['type' => 'CARD', 'cardTypes' => ['CREDIT_CARD']]
         ],
-        expireAfter: 1200,                  // Optional expiry in seconds
-        mode: 'UAT'                         // Use UAT for testing
+        expireAfter: 1200                   // Optional expiry in seconds
     );
 
     // Print payment details
@@ -39,8 +39,7 @@ try {
 
     // Example: Check Payment Status
     $statusResponse = $phonepe->getOrderStatus(
-        orderId: 'ORDER123',
-        mode: 'UAT'
+        orderId: 'ORDER123'
     );
 
     // Print status
@@ -53,8 +52,7 @@ try {
     $refundResponse = $phonepe->initiateRefund(
         merchantRefundId: 'REFUND' . time(),
         originalMerchantOrderId: 'ORDER123',
-        amount: 100 * 100,
-        mode: 'UAT'
+        amount: 100 * 100
     );
 
     // Print refund status
@@ -64,8 +62,7 @@ try {
 
     // Example: Check Refund Status
     $refundStatusResponse = $phonepe->getRefundStatus(
-        merchantRefundId: 'REFUND123',
-        mode: 'UAT'
+        merchantRefundId: 'REFUND123'
     );
 
     // Print refund status details

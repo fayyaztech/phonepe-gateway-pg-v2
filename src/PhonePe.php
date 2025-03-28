@@ -10,7 +10,6 @@
 namespace fayyaztech\PhonePeGatewayPGV2;
 
 use Exception;
-use fayyaztech\phonePePaymentGateway\PhonePeApiException;
 
 class PhonePe
 {
@@ -27,9 +26,11 @@ class PhonePe
     private const CLIENT_VERSION = '1';
     private const GRANT_TYPE = 'client_credentials';
 
-    // Payment modes
-    private const MODE_UAT = 'UAT';  // Testing/Sandbox mode
-    private const MODE_PROD = 'PROD'; // Production mode
+    /**
+     * Available payment modes - use these constants when initializing
+     */
+    public const MODE_UAT = 'UAT';   // For testing/sandbox environment
+    public const MODE_PROD = 'PROD'; // For production environment
 
     /**
      * @var array Default payment modes if none specified
@@ -82,13 +83,45 @@ class PhonePe
      */
     private bool $debug = false;
 
+    /**
+     * @var string Current mode (UAT/PROD)
+     */
+    private string $mode;
+
+    /**
+     * Initialize PhonePe Payment Gateway
+     * 
+     * @param string|null $client_id Your PhonePe client ID
+     * @param string|null $client_secret Your PhonePe client secret
+     * @param string $mode Payment environment (use PhonePe::MODE_UAT for testing or PhonePe::MODE_PROD for production)
+     * @param bool $debug Enable debug logging
+     * 
+     * @example
+     * ```php
+     * // For testing environment
+     * $phonepe = new PhonePe(
+     *     client_id: 'YOUR_CLIENT_ID',
+     *     client_secret: 'YOUR_CLIENT_SECRET',
+     *     mode: PhonePe::MODE_UAT
+     * );
+     * 
+     * // For production environment
+     * $phonepe = new PhonePe(
+     *     client_id: 'YOUR_CLIENT_ID',
+     *     client_secret: 'YOUR_CLIENT_SECRET',
+     *     mode: PhonePe::MODE_PROD
+     * );
+     * ```
+     */
     public function __construct(
         ?string $client_id = null,
         ?string $client_secret = null,
+        string $mode = self::MODE_PROD,  // Default to PROD mode
         bool $debug = false
     ) {
         $this->client_id = $client_id ?? getenv('PHONEPE_CLIENT_ID');
         $this->client_secret = $client_secret ?? getenv('PHONEPE_CLIENT_SECRET');
+        $this->mode = $mode;
         $this->debug = $debug;
 
         if (empty($this->client_id)) throw new PhonePeApiException("Client ID is required");
@@ -105,11 +138,10 @@ class PhonePe
     /**
      * Gets or refreshes the access token
      * 
-     * @param string|null $mode Payment mode (UAT/PROD)
      * @return string Valid access token
      * @throws PhonePeApiException When token request fails
      */
-    private function getAccessToken(?string $mode = null): string
+    private function getAccessToken(): string
     {
         // Return existing token if still valid and not empty
         if (!empty($this->access_token) && time() < $this->token_expires_at) {
@@ -130,7 +162,7 @@ class PhonePe
 
         try {
             $response = $this->makeApiCall(
-                $mode == 'UAT' ? self::UAT_AUTH_URL : self::PROD_AUTH_URL,
+                $this->mode == self::MODE_UAT ? self::UAT_AUTH_URL : self::PROD_AUTH_URL,
                 $headers,
                 $postFields,
                 'POST',
@@ -166,7 +198,6 @@ class PhonePe
      * @param array $metaInfo Optional additional information
      * @param array $enabledPaymentModes Optional array of enabled payment modes
      * @param int $expireAfter Time in seconds after which payment link expires (default 1200)
-     * @param string|null $mode Payment mode (UAT/PROD)
      * @return array{orderId: string, state: string, redirectUrl: string} Payment response
      * @throws PhonePeApiException When API call fails
      */
@@ -176,8 +207,7 @@ class PhonePe
         string $redirectUrl,
         array $metaInfo = [],
         array $enabledPaymentModes = [],
-        int $expireAfter = 1200,
-        ?string $mode = null
+        int $expireAfter = 1200
     ): array {
         $this->validateAmount($amount);
 
@@ -204,7 +234,7 @@ class PhonePe
             ]
         ];
 
-        $baseUrl = $mode == 'UAT' ? self::UAT_CHECKOUT_URL : self::PROD_CHECKOUT_URL;
+        $baseUrl = $this->mode == self::MODE_UAT ? self::UAT_CHECKOUT_URL : self::PROD_CHECKOUT_URL;
         $url = $baseUrl . 'pay';
 
         try {
@@ -229,7 +259,6 @@ class PhonePe
      * Check the status of a payment order
      * 
      * @param string $orderId PhonePe Order ID to check
-     * @param string|null $mode Payment mode (UAT/PROD)
      * @return array{
      *     success: bool,
      *     data?: array{
@@ -244,9 +273,9 @@ class PhonePe
      * }
      * @throws PhonePeApiException When API call fails
      */
-    public function getOrderStatus(string $orderId, ?string $mode = null): array
+    public function getOrderStatus(string $orderId): array
     {
-        $baseUrl = $mode == 'UAT' ? self::UAT_CHECKOUT_URL : self::PROD_CHECKOUT_URL;
+        $baseUrl = $this->mode == self::MODE_UAT ? self::UAT_CHECKOUT_URL : self::PROD_CHECKOUT_URL;
         $url = $baseUrl . "order/{$orderId}/status";
 
         try {
@@ -277,15 +306,13 @@ class PhonePe
      * @param string $merchantRefundId Unique ID for this refund
      * @param string $originalMerchantOrderId Original order ID to refund
      * @param int $amount Amount to refund in lowest denomination
-     * @param string|null $mode Payment mode (UAT/PROD)
      * @return array Refund response
      * @throws PhonePeApiException When API call fails
      */
     public function initiateRefund(
         string $merchantRefundId,
         string $originalMerchantOrderId,
-        int $amount,
-        ?string $mode = null
+        int $amount
     ): array {
         $this->validateAmount($amount);
 
@@ -295,7 +322,7 @@ class PhonePe
             "amount" => $amount
         ];
 
-        $baseUrl = $mode == 'UAT' ? self::UAT_PAYMENTS_URL : self::PROD_PAYMENTS_URL;
+        $baseUrl = $this->mode == self::MODE_UAT ? self::UAT_PAYMENTS_URL : self::PROD_PAYMENTS_URL;
         $url = $baseUrl . 'refund';
 
         try {
@@ -317,13 +344,12 @@ class PhonePe
      * Check the status of a refund
      * 
      * @param string $merchantRefundId The refund ID to check status for
-     * @param string|null $mode Payment mode (UAT/PROD)
      * @return array Status response with refund details
      * @throws PhonePeApiException When API call fails
      */
-    public function getRefundStatus(string $merchantRefundId, ?string $mode = null): array
+    public function getRefundStatus(string $merchantRefundId): array
     {
-        $baseUrl = $mode == 'UAT' ? self::UAT_PAYMENTS_URL : self::PROD_PAYMENTS_URL;
+        $baseUrl = $this->mode == self::MODE_UAT ? self::UAT_PAYMENTS_URL : self::PROD_PAYMENTS_URL;
         $url = $baseUrl . "refund/{$merchantRefundId}/status";
 
         try {
