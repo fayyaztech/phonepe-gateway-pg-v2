@@ -10,6 +10,7 @@
 namespace fayyaztech\PhonePeGatewayPGV2;
 
 use Exception;
+use fayyaztech\phonePePaymentGateway\PhonePeApiException;
 
 class PhonePe
 {

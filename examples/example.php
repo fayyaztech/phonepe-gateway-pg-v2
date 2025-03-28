@@ -3,7 +3,7 @@
 require_once __DIR__ . "/../vendor/autoload.php";
 
 use fayyaztech\PhonePeGatewayPGV2\PhonePe;
-use fayyaztech\PhonePeGatewayPGV2\PhonePeApiException;
+use fayyaztech\phonePePaymentGateway\PhonePeApiException;
 
 try {
     // Initialize PhonePe with your credentials
