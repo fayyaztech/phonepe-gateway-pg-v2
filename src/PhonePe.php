@@ -175,8 +175,8 @@ class PhonePe
 
             // Store all token information
             $this->access_token = $response->access_token;
-            $this->encrypted_access_token = $response->encrypted_access_token;
-            $this->refresh_token = $response->refresh_token;
+            $this->encrypted_access_token = $response->encrypted_access_token ?? '';
+            $this->refresh_token = $response->refresh_token ?? '';
             $this->token_type = $response->token_type;
 
             // Calculate expiry time
