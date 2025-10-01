@@ -1,41 +1,68 @@
 {
-    "name": "fayyaztech/php-phonepe-gateway-v2",
+    "name": "fayyaztech/phonepe-gateway-pg-v2",
+    "description": "A PHP wrapper for PhonePe Payment Gateway V2 integration with simplified API",
     "type": "library",
+    "keywords": [
+        "phonepe",
+        "payment",
+        "gateway",
+        "sdk",
+        "php",
+        "payment-gateway",
+        "india",
+        "upi",
+        "credit-card",
+        "debit-card"
+    ],
+    "homepage": "https://github.com/fayyaztech/phonepe-gateway-pg-v2",
     "license": "MIT",
     "autoload": {
         "psr-4": {
-            "Fayyaztech\\PhpPhonepeGatewayV2\\": "src/"
+            "Fayyaztech\\PhonePgV2\\": "src/"
         }
     },
     "authors": [
         {
-            "name": "fayyaztech",
-            "email": "fayyaztech@gmail.com"
+            "name": "Fayyaz Ahmed",
+            "email": "fayyaztech@gmail.com",
+            "homepage": "https://github.com/fayyaztech",
+            "role": "Developer"
         }
     ],
-    "minimum-stability": "beta",
     "repositories": [
         {
-            "type": "package",
-            "url": "./vendor/phonepe/pg-sdk-php/",
-            "package": {
-                "name": "phonepe/pg-php-sdk-v2",
-                "version": "2.0.0",
-                "dist": {
-                    "url": "https://phonepe.mycloudrepo.io/public/repositories/phonepe-pg-php-sdk/v2-sdk.zip",
-                    "type": "zip"
-                },
-                "autoload": {
-                    "classmap": [
-                        "/"
-                    ]
-                }
-            }
+            "type": "composer",
+            "url": "https://phonepe.mycloudrepo.io/public/repositories/phonepe-pg-php-sdk"
         }
     ],
     "require": {
+        "php": "^7.4|^8.0",
+        "ext-json": "*",
+        "ext-curl": "*",
         "phonepe/pg-php-sdk-v2": "^2.0",
         "vlucas/phpdotenv": "^5.6",
         "netresearch/jsonmapper": "^4.4"
-    }
+    },
+    "suggest": {
+        "guzzlehttp/guzzle": "Recommended for making HTTP requests (if not using cURL)",
+        "monolog/monolog": "Recommended for logging"
+    },
+    "scripts": {
+        "examples": "php examples/test_runner.php",
+        "payment-test": "php examples/payment_example.php",
+        "refund-test": "php examples/refund_example.php"
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "1.0.x-dev"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "php-http/discovery": true
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
 }
